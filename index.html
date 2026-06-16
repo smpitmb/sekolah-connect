@@ -1,0 +1,1413 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+<title>SekolahConnect</title>
+
+<!-- ===== PWA: Manifest & Meta Tags ===== -->
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2563eb">
+<meta name="mobile-web-app-capable" content="yes">
+
+<!-- Dukungan "Add to Home Screen" untuk iOS Safari -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SekolahConnect">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="apple-touch-icon" sizes="152x152" href="icons/icon-152.png">
+<link rel="apple-touch-icon" sizes="180x180" href="icons/icon-192.png">
+
+<!-- Ikon untuk Android / browser umum -->
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="icon" type="image/png" sizes="96x96" href="icons/icon-96.png">
+
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-database-compat.js"></script>
+<script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-storage-compat.js"></script>
+<style>
+  :root{
+    --primary:#2563eb;
+    --primary-dark:#1d4ed8;
+    --bg:#f0f2f5;
+    --card:#ffffff;
+    --text:#1c1e21;
+    --muted:#65676b;
+    --border:#dddfe2;
+    --green:#16a34a;
+    --red:#dc2626;
+    --orange:#ea580c;
+  }
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif;
+    background:var(--bg);
+    color:var(--text);
+    min-height:100vh;
+  }
+  .hidden{display:none !important;}
+
+  /* ===== LOGIN ===== */
+  #loginScreen{
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    min-height:100vh;
+    background:linear-gradient(135deg,var(--primary),#1e40af);
+    padding:16px;
+  }
+  .login-box{
+    background:var(--card);
+    border-radius:16px;
+    padding:32px 24px;
+    width:100%;
+    max-width:380px;
+    box-shadow:0 10px 40px rgba(0,0,0,0.2);
+  }
+  .login-box h1{
+    text-align:center;
+    color:var(--primary);
+    font-size:28px;
+    margin-bottom:4px;
+  }
+  .login-box p.sub{
+    text-align:center;
+    color:var(--muted);
+    margin-bottom:24px;
+    font-size:14px;
+  }
+  .form-group{margin-bottom:14px;}
+  .form-group label{
+    display:block;
+    font-size:13px;
+    font-weight:600;
+    margin-bottom:6px;
+    color:var(--text);
+  }
+  .form-group input, .form-group select, .form-group textarea{
+    width:100%;
+    padding:12px;
+    border:1px solid var(--border);
+    border-radius:8px;
+    font-size:15px;
+    background:#fff;
+  }
+  .form-group input:focus, .form-group select:focus, .form-group textarea:focus{
+    outline:none;
+    border-color:var(--primary);
+  }
+  .btn{
+    width:100%;
+    padding:12px;
+    border:none;
+    border-radius:8px;
+    background:var(--primary);
+    color:#fff;
+    font-size:15px;
+    font-weight:600;
+    cursor:pointer;
+    transition:background 0.2s;
+  }
+  .btn:hover{background:var(--primary-dark);}
+  .btn-secondary{
+    background:#e4e6eb;
+    color:var(--text);
+  }
+  .btn-secondary:hover{background:#d8dadf;}
+  .btn-sm{padding:6px 12px;font-size:13px;width:auto;}
+  .btn-danger{background:var(--red);}
+  .toggle-auth{
+    text-align:center;
+    margin-top:14px;
+    font-size:14px;
+    color:var(--primary);
+    cursor:pointer;
+  }
+  .error-msg{
+    background:#fde8e8;
+    color:var(--red);
+    padding:10px;
+    border-radius:8px;
+    font-size:13px;
+    margin-bottom:12px;
+  }
+  .success-msg{
+    background:#e6f4ea;
+    color:var(--green);
+    padding:10px;
+    border-radius:8px;
+    font-size:13px;
+    margin-bottom:12px;
+  }
+
+  /* ===== APP LAYOUT ===== */
+  #appScreen{display:none;min-height:100vh;}
+  #appScreen.active{display:block;}
+
+  header.topbar{
+    background:var(--card);
+    border-bottom:1px solid var(--border);
+    padding:10px 16px;
+    display:flex;
+    align-items:center;
+    justify-content:space-between;
+    position:sticky;
+    top:0;
+    z-index:50;
+  }
+  .topbar-left{display:flex;align-items:center;gap:10px;}
+  .topbar-left h2{color:var(--primary);font-size:20px;}
+  .topbar-right{display:flex;align-items:center;gap:10px;}
+  .avatar{
+    width:36px;height:36px;border-radius:50%;
+    background:var(--primary);color:#fff;
+    display:flex;align-items:center;justify-content:center;
+    font-weight:700;font-size:15px;flex-shrink:0;
+  }
+  .avatar.small{width:28px;height:28px;font-size:12px;}
+  .icon-btn{
+    background:none;border:none;cursor:pointer;
+    font-size:20px;padding:6px;border-radius:50%;
+    display:flex;align-items:center;justify-content:center;
+    color:var(--muted);
+  }
+  .icon-btn:hover{background:var(--bg);}
+
+  .container{
+    max-width:680px;
+    margin:0 auto;
+    padding:16px;
+  }
+
+  /* Tabs nav */
+  .tabbar{
+    display:flex;
+    background:var(--card);
+    border-bottom:1px solid var(--border);
+    position:sticky;
+    top:57px;
+    z-index:40;
+    overflow-x:auto;
+  }
+  .tab-item{
+    flex:1;
+    text-align:center;
+    padding:12px 8px;
+    cursor:pointer;
+    font-size:13px;
+    font-weight:600;
+    color:var(--muted);
+    border-bottom:3px solid transparent;
+    white-space:nowrap;
+    min-width:90px;
+  }
+  .tab-item.active{
+    color:var(--primary);
+    border-bottom-color:var(--primary);
+  }
+
+  /* Post composer */
+  .composer{
+    background:var(--card);
+    border-radius:10px;
+    padding:14px;
+    margin-bottom:14px;
+    box-shadow:0 1px 2px rgba(0,0,0,0.05);
+  }
+  .composer-top{display:flex;gap:10px;align-items:flex-start;}
+  .composer textarea{
+    flex:1;
+    border:1px solid var(--border);
+    border-radius:8px;
+    padding:10px;
+    resize:vertical;
+    min-height:60px;
+    font-size:14px;
+    font-family:inherit;
+  }
+  .composer-actions{
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    margin-top:10px;
+    flex-wrap:wrap;
+    gap:8px;
+  }
+  .composer-options{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .composer select{
+    padding:6px 8px;
+    border:1px solid var(--border);
+    border-radius:6px;
+    font-size:13px;
+  }
+  .file-label{
+    display:inline-flex;align-items:center;gap:4px;
+    font-size:13px;color:var(--muted);
+    cursor:pointer;padding:6px 10px;border-radius:6px;
+    border:1px solid var(--border);
+  }
+  .file-label:hover{background:var(--bg);}
+  .preview-img{
+    max-width:100%;border-radius:8px;margin-top:8px;
+    max-height:200px;object-fit:cover;
+  }
+
+  /* Post card */
+  .post-card{
+    background:var(--card);
+    border-radius:10px;
+    margin-bottom:14px;
+    box-shadow:0 1px 2px rgba(0,0,0,0.05);
+    overflow:hidden;
+  }
+  .post-header{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    padding:12px 14px;
+  }
+  .post-meta{flex:1;}
+  .post-meta .name{font-weight:600;font-size:14px;}
+  .post-meta .sub{font-size:12px;color:var(--muted);}
+  .badge{
+    display:inline-block;
+    font-size:11px;
+    padding:2px 8px;
+    border-radius:10px;
+    font-weight:600;
+    margin-left:6px;
+  }
+  .badge-admin{background:#fee2e2;color:var(--red);}
+  .badge-guru{background:#dbeafe;color:var(--primary);}
+  .badge-siswa{background:#dcfce7;color:var(--green);}
+  .badge-ortu{background:#fef3c7;color:var(--orange);}
+  .badge-pinned{background:#fef3c7;color:var(--orange);}
+  .post-body{padding:0 14px 12px;}
+  .post-body p{font-size:14px;line-height:1.5;white-space:pre-wrap;word-break:break-word;}
+  .post-img{width:100%;max-height:400px;object-fit:cover;display:block;margin-top:8px;}
+  .post-class-tag{
+    display:inline-block;
+    background:var(--bg);
+    color:var(--primary);
+    font-size:12px;
+    padding:2px 8px;
+    border-radius:6px;
+    margin-top:6px;
+  }
+  .post-footer{
+    display:flex;
+    border-top:1px solid var(--border);
+    padding:4px 8px;
+  }
+  .post-action{
+    flex:1;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    gap:6px;
+    padding:8px;
+    cursor:pointer;
+    border-radius:6px;
+    font-size:13px;
+    font-weight:600;
+    color:var(--muted);
+    background:none;
+    border:none;
+  }
+  .post-action:hover{background:var(--bg);}
+  .post-action.liked{color:var(--primary);}
+  .post-delete{
+    color:var(--red);
+    cursor:pointer;
+    font-size:18px;
+    padding:4px;
+  }
+
+  /* Comments */
+  .comments-box{
+    border-top:1px solid var(--border);
+    padding:10px 14px;
+  }
+  .comment{
+    display:flex;gap:8px;margin-bottom:8px;align-items:flex-start;
+  }
+  .comment-bubble{
+    background:var(--bg);
+    border-radius:10px;
+    padding:6px 10px;
+    font-size:13px;
+    flex:1;
+  }
+  .comment-bubble .name{font-weight:600;font-size:12px;}
+  .comment-input-row{display:flex;gap:8px;margin-top:8px;}
+  .comment-input-row input{
+    flex:1;border:1px solid var(--border);border-radius:20px;
+    padding:8px 14px;font-size:13px;
+  }
+
+  /* Empty state */
+  .empty-state{
+    text-align:center;
+    padding:40px 20px;
+    color:var(--muted);
+  }
+  .empty-state .icon{font-size:48px;margin-bottom:10px;}
+
+  /* Modal */
+  .modal-overlay{
+    position:fixed;top:0;left:0;right:0;bottom:0;
+    background:rgba(0,0,0,0.5);
+    display:flex;align-items:center;justify-content:center;
+    z-index:200;
+    padding:16px;
+  }
+  .modal-box{
+    background:#fff;border-radius:12px;
+    width:100%;max-width:420px;
+    max-height:85vh;overflow-y:auto;
+    padding:20px;
+  }
+  .modal-box h3{margin-bottom:14px;font-size:18px;}
+  .modal-close-row{
+    display:flex;justify-content:flex-end;gap:8px;margin-top:16px;
+  }
+
+  /* Profile page */
+  .profile-header{
+    background:var(--card);
+    border-radius:10px;
+    padding:20px;
+    text-align:center;
+    margin-bottom:14px;
+  }
+  .profile-header .avatar{
+    width:70px;height:70px;font-size:28px;margin:0 auto 10px;
+  }
+  .profile-header h2{font-size:18px;}
+  .profile-header .role-line{color:var(--muted);font-size:13px;margin-top:4px;}
+  .info-row{
+    display:flex;justify-content:space-between;
+    padding:10px 0;border-bottom:1px solid var(--border);
+    font-size:14px;
+  }
+  .info-row:last-child{border-bottom:none;}
+  .info-row .label{color:var(--muted);}
+
+  /* Chat */
+  .chat-list-item{
+    display:flex;gap:10px;align-items:center;
+    background:var(--card);padding:12px;border-radius:10px;
+    margin-bottom:8px;cursor:pointer;
+  }
+  .chat-list-item:hover{background:#f5f6f7;}
+  .chat-window{
+    background:var(--card);border-radius:10px;
+    display:flex;flex-direction:column;
+    height:60vh;
+  }
+  .chat-messages{
+    flex:1;overflow-y:auto;padding:12px;
+    display:flex;flex-direction:column;gap:8px;
+  }
+  .chat-bubble{
+    max-width:75%;
+    padding:8px 12px;
+    border-radius:14px;
+    font-size:14px;
+    word-break:break-word;
+  }
+  .chat-bubble.mine{
+    background:var(--primary);color:#fff;
+    align-self:flex-end;border-bottom-right-radius:4px;
+  }
+  .chat-bubble.theirs{
+    background:var(--bg);
+    align-self:flex-start;border-bottom-left-radius:4px;
+  }
+  .chat-input-row{
+    display:flex;gap:8px;padding:10px;border-top:1px solid var(--border);
+  }
+  .chat-input-row input{
+    flex:1;border:1px solid var(--border);border-radius:20px;
+    padding:10px 14px;font-size:14px;
+  }
+
+  .loading-spin{
+    text-align:center;padding:30px;color:var(--muted);
+  }
+
+  /* Class group cards */
+  .class-card{
+    background:var(--card);border-radius:10px;padding:14px;
+    margin-bottom:10px;display:flex;justify-content:space-between;
+    align-items:center;cursor:pointer;
+  }
+  .class-card:hover{background:#f5f6f7;}
+  .class-card .name{font-weight:600;font-size:15px;}
+  .class-card .sub{font-size:12px;color:var(--muted);}
+
+  @media(max-width:480px){
+    .container{padding:10px;}
+    .login-box{padding:24px 18px;}
+  }
+</style>
+</head>
+<body>
+
+<!-- ============ LOGIN SCREEN ============ -->
+<div id="loginScreen">
+  <div class="login-box">
+    <h1>SekolahConnect</h1>
+    <p class="sub">Media sosial untuk warga sekolah</p>
+
+    <div id="installBannerLogin" class="hidden" style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:10px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;gap:8px;">
+      <span style="font-size:12px;color:#1e40af;">📲 Instal aplikasi ini di HP Anda</span>
+      <button class="btn btn-sm" onclick="triggerInstall()" style="width:auto;">Instal</button>
+    </div>
+
+    <div id="authError" class="error-msg hidden"></div>
+    <div id="authSuccess" class="success-msg hidden"></div>
+
+
+    <!-- LOGIN FORM -->
+    <div id="loginForm">
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="loginEmail" placeholder="email@contoh.com">
+      </div>
+      <div class="form-group">
+        <label>Kata Sandi</label>
+        <input type="password" id="loginPassword" placeholder="••••••••">
+      </div>
+      <button class="btn" onclick="doLogin()">Masuk</button>
+      <p class="toggle-auth" onclick="showRegister()">Belum punya akun? Daftar di sini</p>
+    </div>
+
+    <!-- REGISTER FORM -->
+    <div id="registerForm" class="hidden">
+      <div class="form-group">
+        <label>Nama Lengkap</label>
+        <input type="text" id="regName" placeholder="Nama lengkap">
+      </div>
+      <div class="form-group">
+        <label>Email</label>
+        <input type="email" id="regEmail" placeholder="email@contoh.com">
+      </div>
+      <div class="form-group">
+        <label>Kata Sandi</label>
+        <input type="password" id="regPassword" placeholder="Minimal 6 karakter">
+      </div>
+      <div class="form-group">
+        <label>Peran</label>
+        <select id="regRole" onchange="toggleRegFields()">
+          <option value="siswa">Siswa</option>
+          <option value="guru">Guru</option>
+          <option value="ortu">Orang Tua</option>
+        </select>
+      </div>
+      <div class="form-group" id="regClassGroup">
+        <label>Kelas</label>
+        <select id="regClass">
+          <option value="">-- Pilih Kelas --</option>
+        </select>
+      </div>
+      <div class="form-group hidden" id="regChildGroup">
+        <label>Nama Anak (untuk Orang Tua)</label>
+        <input type="text" id="regChildName" placeholder="Nama lengkap anak">
+      </div>
+      <button class="btn" onclick="doRegister()">Daftar</button>
+      <p class="toggle-auth" onclick="showLogin()">Sudah punya akun? Masuk</p>
+    </div>
+  </div>
+</div>
+
+<!-- ============ APP SCREEN ============ -->
+<div id="appScreen">
+  <header class="topbar">
+    <div class="topbar-left">
+      <h2>SekolahConnect</h2>
+    </div>
+    <div class="topbar-right">
+      <button class="icon-btn hidden" id="installBtnApp" onclick="triggerInstall()" title="Instal Aplikasi">📲</button>
+      <button class="icon-btn" onclick="goToTab('chat')" title="Pesan">💬</button>
+      <button class="icon-btn" onclick="goToTab('profile')" title="Profil">
+        <span class="avatar small" id="topAvatar">?</span>
+      </button>
+      <button class="icon-btn" onclick="doLogout()" title="Keluar">🚪</button>
+    </div>
+  </header>
+
+  <div class="tabbar">
+    <div class="tab-item active" data-tab="feed" onclick="goToTab('feed')">🏠 Beranda</div>
+    <div class="tab-item" data-tab="announcements" onclick="goToTab('announcements')">📢 Pengumuman</div>
+    <div class="tab-item" data-tab="classes" onclick="goToTab('classes')">🏫 Kelas</div>
+    <div class="tab-item" data-tab="chat" onclick="goToTab('chat')">💬 Pesan</div>
+    <div class="tab-item" data-tab="profile" onclick="goToTab('profile')">👤 Profil</div>
+  </div>
+
+  <div class="container">
+    <!-- FEED TAB -->
+    <div id="tab-feed" class="tab-content">
+      <div class="composer">
+        <div class="composer-top">
+          <span class="avatar small" id="composerAvatar">?</span>
+          <textarea id="postText" placeholder="Apa yang ingin Anda bagikan?"></textarea>
+        </div>
+        <div id="postImagePreviewWrap"></div>
+        <div class="composer-actions">
+          <div class="composer-options">
+            <label class="file-label">
+              📷 Foto
+              <input type="file" id="postImageInput" accept="image/*" style="display:none" onchange="handlePostImage(event)">
+            </label>
+            <select id="postTarget">
+              <option value="public">Untuk Semua</option>
+            </select>
+          </div>
+          <button class="btn btn-sm" onclick="submitPost()" style="width:auto;">Kirim</button>
+        </div>
+      </div>
+      <div id="feedList"></div>
+    </div>
+
+    <!-- ANNOUNCEMENTS TAB -->
+    <div id="tab-announcements" class="tab-content hidden">
+      <div class="composer" id="announceComposer" style="display:none;">
+        <div class="composer-top">
+          <span class="avatar small" id="annAvatar">?</span>
+          <textarea id="announceText" placeholder="Tulis pengumuman resmi..."></textarea>
+        </div>
+        <div class="composer-actions">
+          <div></div>
+          <button class="btn btn-sm" onclick="submitAnnouncement()" style="width:auto;">Posting Pengumuman</button>
+        </div>
+      </div>
+      <div id="announcementList"></div>
+    </div>
+
+    <!-- CLASSES TAB -->
+    <div id="tab-classes" class="tab-content hidden">
+      <div id="classList"></div>
+      <div id="classFeedView" class="hidden">
+        <button class="btn btn-secondary btn-sm" onclick="backToClassList()" style="width:auto;margin-bottom:10px;">← Kembali</button>
+        <h3 id="classFeedTitle" style="margin-bottom:10px;"></h3>
+        <div class="composer">
+          <div class="composer-top">
+            <span class="avatar small" id="classComposerAvatar">?</span>
+            <textarea id="classPostText" placeholder="Tulis sesuatu untuk kelas ini..."></textarea>
+          </div>
+          <div id="classPostImagePreviewWrap"></div>
+          <div class="composer-actions">
+            <label class="file-label">
+              📷 Foto
+              <input type="file" id="classPostImageInput" accept="image/*" style="display:none" onchange="handleClassPostImage(event)">
+            </label>
+            <button class="btn btn-sm" onclick="submitClassPost()" style="width:auto;">Kirim</button>
+          </div>
+        </div>
+        <div id="classFeedList"></div>
+      </div>
+    </div>
+
+    <!-- CHAT TAB -->
+    <div id="tab-chat" class="tab-content hidden">
+      <div id="chatListView">
+        <div id="chatList"></div>
+      </div>
+      <div id="chatWindowView" class="hidden">
+        <button class="btn btn-secondary btn-sm" onclick="backToChatList()" style="width:auto;margin-bottom:10px;">← Kembali</button>
+        <div class="chat-window">
+          <div class="chat-messages" id="chatMessages"></div>
+          <div class="chat-input-row">
+            <input type="text" id="chatInput" placeholder="Tulis pesan..." onkeypress="if(event.key==='Enter')sendChatMessage()">
+            <button class="btn btn-sm" onclick="sendChatMessage()" style="width:auto;">Kirim</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROFILE TAB -->
+    <div id="tab-profile" class="tab-content hidden">
+      <div class="profile-header">
+        <div class="avatar" id="profileAvatar">?</div>
+        <h2 id="profileName">-</h2>
+        <div class="role-line" id="profileRole">-</div>
+      </div>
+      <div class="composer" style="margin-bottom:14px;">
+        <div class="info-row"><span class="label">Email</span><span id="profileEmail">-</span></div>
+        <div class="info-row" id="profileClassRow"><span class="label">Kelas</span><span id="profileClass">-</span></div>
+        <div class="info-row hidden" id="profileChildRow"><span class="label">Nama Anak</span><span id="profileChild">-</span></div>
+      </div>
+      <button class="btn btn-danger" onclick="doLogout()">Keluar dari Akun</button>
+
+      <div id="adminPanel" class="hidden" style="margin-top:20px;">
+        <h3 style="margin-bottom:10px;">Panel Admin</h3>
+        <div class="composer">
+          <p style="font-size:13px;color:var(--muted);margin-bottom:8px;">Kelola pengguna terdaftar</p>
+          <div id="userManageList"></div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Generic Modal -->
+<div id="modalOverlay" class="modal-overlay hidden">
+  <div class="modal-box" id="modalBox"></div>
+</div>
+
+<script>
+/* ====================================================================
+   KONFIGURASI FIREBASE
+   Ganti dengan konfigurasi project Firebase Anda sendiri.
+   Buat project di https://console.firebase.google.com
+   Aktifkan: Authentication (Email/Password) dan Realtime Database
+==================================================================== */
+const firebaseConfig = {
+  apiKey: "GANTI_DENGAN_API_KEY",
+  authDomain: "GANTI.firebaseapp.com",
+  databaseURL: "https://GANTI-default-rtdb.firebaseio.com",
+  projectId: "GANTI",
+  storageBucket: "GANTI.appspot.com",
+  messagingSenderId: "GANTI",
+  appId: "GANTI"
+};
+
+firebase.initializeApp(firebaseConfig);
+const auth = firebase.auth();
+const db = firebase.database();
+
+/* ====================================================================
+   DAFTAR KELAS - sesuaikan dengan kelas di sekolah Anda
+==================================================================== */
+const CLASS_LIST = ["7A","7B","7C","8A","8B","8C","9A","9B","9C"];
+
+/* ====================================================================
+   STATE GLOBAL
+==================================================================== */
+let currentUser = null;
+let currentTab = 'feed';
+let pendingPostImage = null;
+let pendingClassPostImage = null;
+let activeClassId = null;
+let activeChatPeerUid = null;
+let chatMessagesListener = null;
+
+/* ====================================================================
+   UTIL
+==================================================================== */
+function initials(name){
+  if(!name) return '?';
+  return name.trim().split(/\s+/).map(w=>w[0]).slice(0,2).join('').toUpperCase();
+}
+function timeAgo(ts){
+  const diff = Math.floor((Date.now()-ts)/1000);
+  if(diff<60) return 'Baru saja';
+  if(diff<3600) return Math.floor(diff/60)+' menit lalu';
+  if(diff<86400) return Math.floor(diff/3600)+' jam lalu';
+  if(diff<604800) return Math.floor(diff/86400)+' hari lalu';
+  return new Date(ts).toLocaleDateString('id-ID',{day:'numeric',month:'short',year:'numeric'});
+}
+function escapeHtml(str){
+  if(!str) return '';
+  return str.replace(/[&<>"']/g, c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+}
+function badgeForRole(role){
+  switch(role){
+    case 'admin': return '<span class="badge badge-admin">Admin</span>';
+    case 'guru': return '<span class="badge badge-guru">Guru</span>';
+    case 'siswa': return '<span class="badge badge-siswa">Siswa</span>';
+    case 'ortu': return '<span class="badge badge-ortu">Orang Tua</span>';
+    default: return '';
+  }
+}
+function roleLabel(role){
+  return {admin:'Administrator', guru:'Guru', siswa:'Siswa', ortu:'Orang Tua'}[role] || role;
+}
+function showError(msg){
+  const el = document.getElementById('authError');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  document.getElementById('authSuccess').classList.add('hidden');
+}
+function showSuccess(msg){
+  const el = document.getElementById('authSuccess');
+  el.textContent = msg;
+  el.classList.remove('hidden');
+  document.getElementById('authError').classList.add('hidden');
+}
+function clearAuthMsgs(){
+  document.getElementById('authError').classList.add('hidden');
+  document.getElementById('authSuccess').classList.add('hidden');
+}
+
+/* ====================================================================
+   AUTH UI TOGGLES
+==================================================================== */
+function showRegister(){
+  clearAuthMsgs();
+  document.getElementById('loginForm').classList.add('hidden');
+  document.getElementById('registerForm').classList.remove('hidden');
+  populateClassDropdown();
+}
+function showLogin(){
+  clearAuthMsgs();
+  document.getElementById('registerForm').classList.add('hidden');
+  document.getElementById('loginForm').classList.remove('hidden');
+}
+function toggleRegFields(){
+  const role = document.getElementById('regRole').value;
+  document.getElementById('regClassGroup').classList.toggle('hidden', role==='guru');
+  document.getElementById('regChildGroup').classList.toggle('hidden', role!=='ortu');
+}
+function populateClassDropdown(){
+  const sel = document.getElementById('regClass');
+  if(sel.options.length<=1){
+    CLASS_LIST.forEach(c=>{
+      const opt = document.createElement('option');
+      opt.value = c; opt.textContent = 'Kelas '+c;
+      sel.appendChild(opt);
+    });
+  }
+}
+
+/* ====================================================================
+   REGISTER & LOGIN
+==================================================================== */
+function doRegister(){
+  const name = document.getElementById('regName').value.trim();
+  const email = document.getElementById('regEmail').value.trim();
+  const password = document.getElementById('regPassword').value;
+  const role = document.getElementById('regRole').value;
+  const kelas = document.getElementById('regClass').value;
+  const childName = document.getElementById('regChildName').value.trim();
+
+  if(!name || !email || !password){
+    showError('Mohon lengkapi semua data.'); return;
+  }
+  if(password.length<6){
+    showError('Kata sandi minimal 6 karakter.'); return;
+  }
+  if(role!=='guru' && !kelas){
+    showError('Mohon pilih kelas.'); return;
+  }
+  if(role==='ortu' && !childName){
+    showError('Mohon isi nama anak.'); return;
+  }
+
+  auth.createUserWithEmailAndPassword(email, password)
+    .then(cred=>{
+      const uid = cred.user.uid;
+      const userData = {
+        name, email, role,
+        kelas: role==='guru' ? '' : kelas,
+        childName: role==='ortu' ? childName : '',
+        createdAt: firebase.database.ServerValue.TIMESTAMP
+      };
+      return db.ref('users/'+uid).set(userData);
+    })
+    .then(()=>{
+      showSuccess('Pendaftaran berhasil! Anda akan masuk otomatis.');
+    })
+    .catch(err=>{
+      showError(translateFirebaseError(err));
+    });
+}
+
+function doLogin(){
+  const email = document.getElementById('loginEmail').value.trim();
+  const password = document.getElementById('loginPassword').value;
+  if(!email || !password){
+    showError('Mohon isi email dan kata sandi.'); return;
+  }
+  auth.signInWithEmailAndPassword(email, password)
+    .catch(err=>{ showError(translateFirebaseError(err)); });
+}
+
+function doLogout(){
+  if(chatMessagesListener) chatMessagesListener();
+  auth.signOut();
+}
+
+function translateFirebaseError(err){
+  const map = {
+    'auth/email-already-in-use':'Email sudah terdaftar.',
+    'auth/invalid-email':'Format email tidak valid.',
+    'auth/weak-password':'Kata sandi terlalu lemah (minimal 6 karakter).',
+    'auth/user-not-found':'Email tidak ditemukan.',
+    'auth/wrong-password':'Kata sandi salah.',
+    'auth/invalid-credential':'Email atau kata sandi salah.',
+    'auth/too-many-requests':'Terlalu banyak percobaan. Coba lagi nanti.'
+  };
+  return map[err.code] || ('Terjadi kesalahan: '+err.message);
+}
+
+/* ====================================================================
+   AUTH STATE OBSERVER
+==================================================================== */
+auth.onAuthStateChanged(user=>{
+  if(user){
+    db.ref('users/'+user.uid).once('value').then(snap=>{
+      const data = snap.val();
+      if(!data){
+        setTimeout(()=>{
+          db.ref('users/'+user.uid).once('value').then(snap2=>{
+            if(snap2.val()){
+              currentUser = Object.assign({uid:user.uid}, snap2.val());
+              enterApp();
+            } else {
+              showError('Data profil tidak ditemukan. Hubungi admin.');
+              auth.signOut();
+            }
+          });
+        }, 1200);
+        return;
+      }
+      currentUser = Object.assign({uid:user.uid}, data);
+      enterApp();
+    });
+  } else {
+    currentUser = null;
+    document.getElementById('loginScreen').style.display = 'flex';
+    document.getElementById('appScreen').classList.remove('active');
+  }
+});
+
+/* ====================================================================
+   ENTER APP
+==================================================================== */
+function enterApp(){
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appScreen').classList.add('active');
+
+  const init = initials(currentUser.name);
+  document.getElementById('topAvatar').textContent = init;
+  document.getElementById('composerAvatar').textContent = init;
+  document.getElementById('annAvatar').textContent = init;
+  document.getElementById('classComposerAvatar').textContent = init;
+
+  if(currentUser.role==='admin' || currentUser.role==='guru'){
+    document.getElementById('announceComposer').style.display = 'block';
+  }
+
+  setupPostTargetOptions();
+
+  loadFeed();
+  loadAnnouncements();
+  loadClasses();
+  loadProfile();
+}
+
+function setupPostTargetOptions(){
+  const sel = document.getElementById('postTarget');
+  sel.innerHTML = '<option value="public">Untuk Semua</option>';
+  if(currentUser.kelas){
+    const opt = document.createElement('option');
+    opt.value = currentUser.kelas;
+    opt.textContent = 'Kelas '+currentUser.kelas;
+    sel.appendChild(opt);
+  }
+}
+
+/* ====================================================================
+   TAB NAVIGATION
+==================================================================== */
+function goToTab(tab){
+  currentTab = tab;
+  document.querySelectorAll('.tab-item').forEach(el=>{
+    el.classList.toggle('active', el.dataset.tab===tab);
+  });
+  document.querySelectorAll('.tab-content').forEach(el=>{
+    el.classList.add('hidden');
+  });
+  document.getElementById('tab-'+tab).classList.remove('hidden');
+
+  if(tab==='classes'){ backToClassList(); }
+  if(tab==='chat'){ backToChatList(); loadChatList(); }
+}
+
+/* ====================================================================
+   IMAGE HANDLING (kompresi ke base64, disimpan di Realtime Database)
+==================================================================== */
+function handlePostImage(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  compressImage(file, dataUrl=>{
+    pendingPostImage = dataUrl;
+    document.getElementById('postImagePreviewWrap').innerHTML =
+      '<img src="'+dataUrl+'" class="preview-img"><br><span style="font-size:12px;color:var(--muted);cursor:pointer;" onclick="removePostImage()">❌ Hapus foto</span>';
+  });
+}
+function removePostImage(){
+  pendingPostImage = null;
+  document.getElementById('postImagePreviewWrap').innerHTML = '';
+  document.getElementById('postImageInput').value = '';
+}
+function handleClassPostImage(event){
+  const file = event.target.files[0];
+  if(!file) return;
+  compressImage(file, dataUrl=>{
+    pendingClassPostImage = dataUrl;
+    document.getElementById('classPostImagePreviewWrap').innerHTML =
+      '<img src="'+dataUrl+'" class="preview-img"><br><span style="font-size:12px;color:var(--muted);cursor:pointer;" onclick="removeClassPostImage()">❌ Hapus foto</span>';
+  });
+}
+function removeClassPostImage(){
+  pendingClassPostImage = null;
+  document.getElementById('classPostImagePreviewWrap').innerHTML = '';
+  document.getElementById('classPostImageInput').value = '';
+}
+function compressImage(file, callback){
+  const reader = new FileReader();
+  reader.onload = e=>{
+    const img = new Image();
+    img.onload = ()=>{
+      const maxDim = 1000;
+      let w = img.width, h = img.height;
+      if(w>maxDim || h>maxDim){
+        if(w>h){ h = Math.round(h*maxDim/w); w = maxDim; }
+        else { w = Math.round(w*maxDim/h); h = maxDim; }
+      }
+      const canvas = document.createElement('canvas');
+      canvas.width=w; canvas.height=h;
+      const ctx = canvas.getContext('2d');
+      ctx.drawImage(img,0,0,w,h);
+      callback(canvas.toDataURL('image/jpeg', 0.7));
+    };
+    img.src = e.target.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+/* ====================================================================
+   FEED (Beranda)
+==================================================================== */
+function submitPost(){
+  const text = document.getElementById('postText').value.trim();
+  const target = document.getElementById('postTarget').value;
+  if(!text && !pendingPostImage){ return; }
+
+  const post = {
+    authorUid: currentUser.uid,
+    authorName: currentUser.name,
+    authorRole: currentUser.role,
+    text: text,
+    image: pendingPostImage || null,
+    target: target,
+    createdAt: firebase.database.ServerValue.TIMESTAMP,
+    likes: {},
+    comments: {}
+  };
+
+  db.ref('posts').push(post).then(()=>{
+    document.getElementById('postText').value = '';
+    removePostImage();
+  }).catch(err=>alert('Gagal posting: '+err.message));
+}
+
+function loadFeed(){
+  const feedList = document.getElementById('feedList');
+  feedList.innerHTML = '<div class="loading-spin">Memuat beranda...</div>';
+
+  db.ref('posts').orderByChild('createdAt').limitToLast(50).on('value', snap=>{
+    const data = snap.val() || {};
+    const items = Object.entries(data)
+      .filter(([id,p])=> p.target==='public' || p.target===currentUser.kelas )
+      .sort((a,b)=> (b[1].createdAt||0)-(a[1].createdAt||0));
+
+    if(items.length===0){
+      feedList.innerHTML = '<div class="empty-state"><div class="icon">📭</div><p>Belum ada postingan. Jadilah yang pertama berbagi!</p></div>';
+      return;
+    }
+    feedList.innerHTML = items.map(([id,p])=>renderPostCard(id,p,'posts')).join('');
+  });
+}
+
+function renderPostCard(id, p, refPath){
+  const liked = p.likes && p.likes[currentUser.uid];
+  const likeCount = p.likes ? Object.keys(p.likes).length : 0;
+  const commentCount = p.comments ? Object.keys(p.comments).length : 0;
+  const canDelete = currentUser.uid===p.authorUid || currentUser.role==='admin';
+  const classTag = (p.target && p.target!=='public') ?
+    '<div class="post-class-tag">Kelas '+escapeHtml(p.target)+'</div>' : '';
+
+  let html = '<div class="post-card" id="post-'+id+'">';
+  html += '<div class="post-header">';
+  html += '<span class="avatar small">'+initials(p.authorName)+'</span>';
+  html += '<div class="post-meta">';
+  html += '<div class="name">'+escapeHtml(p.authorName)+' '+badgeForRole(p.authorRole)+'</div>';
+  html += '<div class="sub">'+timeAgo(p.createdAt||Date.now())+'</div>';
+  html += '</div>';
+  if(canDelete){
+    html += '<span class="post-delete" onclick="deletePost(\''+refPath+'\',\''+id+'\')">🗑️</span>';
+  }
+  html += '</div>';
+  html += '<div class="post-body">';
+  if(p.text) html += '<p>'+escapeHtml(p.text)+'</p>';
+  if(p.image) html += '<img src="'+p.image+'" class="post-img">';
+  html += classTag;
+  html += '</div>';
+  html += '<div class="post-footer">';
+  html += '<button class="post-action '+(liked?'liked':'')+'" onclick="toggleLike(\''+refPath+'\',\''+id+'\')">👍 Suka'+(likeCount>0?' ('+likeCount+')':'')+'</button>';
+  html += '<button class="post-action" onclick="toggleComments(\''+refPath+'\',\''+id+'\')">💬 Komentar'+(commentCount>0?' ('+commentCount+')':'')+'</button>';
+  html += '</div>';
+  html += '<div class="comments-box hidden" id="comments-'+refPath.replace(/\//g,'_')+'-'+id+'"></div>';
+  html += '</div>';
+  return html;
+}
+
+function toggleLike(refPath, id){
+  const likeRef = db.ref(refPath+'/'+id+'/likes/'+currentUser.uid);
+  likeRef.once('value').then(snap=>{
+    if(snap.exists()) likeRef.remove();
+    else likeRef.set(true);
+  });
+}
+
+function deletePost(refPath, id){
+  if(!confirm('Hapus postingan ini?')) return;
+  db.ref(refPath+'/'+id).remove();
+}
+
+function toggleComments(refPath, id){
+  const boxId = 'comments-'+refPath.replace(/\//g,'_')+'-'+id;
+  const box = document.getElementById(boxId);
+  if(box.classList.contains('hidden')){
+    box.classList.remove('hidden');
+    renderComments(refPath, id, box);
+  } else {
+    box.classList.add('hidden');
+    box.innerHTML = '';
+  }
+}
+
+function renderComments(refPath, id, box){
+  db.ref(refPath+'/'+id+'/comments').on('value', snap=>{
+    const data = snap.val() || {};
+    const items = Object.entries(data).sort((a,b)=>(a[1].createdAt||0)-(b[1].createdAt||0));
+    let html = '';
+    items.forEach(([cid,c])=>{
+      html += '<div class="comment">';
+      html += '<span class="avatar small">'+initials(c.authorName)+'</span>';
+      html += '<div class="comment-bubble"><span class="name">'+escapeHtml(c.authorName)+'</span><br>'+escapeHtml(c.text)+'</div>';
+      html += '</div>';
+    });
+    html += '<div class="comment-input-row">';
+    html += '<input type="text" id="cinput-'+refPath.replace(/\//g,'_')+'-'+id+'" placeholder="Tulis komentar..." onkeypress="if(event.key===\'Enter\')addComment(\''+refPath+'\',\''+id+'\')">';
+    html += '<button class="btn btn-sm" onclick="addComment(\''+refPath+'\',\''+id+'\')" style="width:auto;">Kirim</button>';
+    html += '</div>';
+    box.innerHTML = html;
+  });
+}
+
+function addComment(refPath, id){
+  const inputId = 'cinput-'+refPath.replace(/\//g,'_')+'-'+id;
+  const input = document.getElementById(inputId);
+  const text = input.value.trim();
+  if(!text) return;
+  db.ref(refPath+'/'+id+'/comments').push({
+    authorName: currentUser.name,
+    authorUid: currentUser.uid,
+    text: text,
+    createdAt: firebase.database.ServerValue.TIMESTAMP
+  }).then(()=>{ input.value=''; });
+}
+
+/* ====================================================================
+   PENGUMUMAN
+==================================================================== */
+function submitAnnouncement(){
+  const text = document.getElementById('announceText').value.trim();
+  if(!text) return;
+  db.ref('announcements').push({
+    authorName: currentUser.name,
+    authorRole: currentUser.role,
+    authorUid: currentUser.uid,
+    text: text,
+    createdAt: firebase.database.ServerValue.TIMESTAMP
+  }).then(()=>{
+    document.getElementById('announceText').value = '';
+  });
+}
+
+function loadAnnouncements(){
+  const list = document.getElementById('announcementList');
+  list.innerHTML = '<div class="loading-spin">Memuat pengumuman...</div>';
+
+  db.ref('announcements').orderByChild('createdAt').limitToLast(50).on('value', snap=>{
+    const data = snap.val() || {};
+    const items = Object.entries(data).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
+    if(items.length===0){
+      list.innerHTML = '<div class="empty-state"><div class="icon">📢</div><p>Belum ada pengumuman.</p></div>';
+      return;
+    }
+    list.innerHTML = items.map(([id,a])=>{
+      const canDelete = currentUser.uid===a.authorUid || currentUser.role==='admin';
+      let html = '<div class="post-card">';
+      html += '<div class="post-header">';
+      html += '<span class="avatar small">'+initials(a.authorName)+'</span>';
+      html += '<div class="post-meta">';
+      html += '<div class="name">'+escapeHtml(a.authorName)+' '+badgeForRole(a.authorRole)+' <span class="badge badge-pinned">📌 Pengumuman</span></div>';
+      html += '<div class="sub">'+timeAgo(a.createdAt||Date.now())+'</div>';
+      html += '</div>';
+      if(canDelete){
+        html += '<span class="post-delete" onclick="db.ref(\'announcements/'+id+'\').remove()">🗑️</span>';
+      }
+      html += '</div>';
+      html += '<div class="post-body"><p>'+escapeHtml(a.text)+'</p></div>';
+      html += '</div>';
+      return html;
+    }).join('');
+  });
+}
+
+/* ====================================================================
+   KELAS (Class Groups)
+==================================================================== */
+function loadClasses(){
+  const list = document.getElementById('classList');
+  let html = '';
+  CLASS_LIST.forEach(c=>{
+    html += '<div class="class-card" onclick="openClass(\''+c+'\')">';
+    html += '<div><div class="name">Kelas '+c+'</div><div class="sub">Grup diskusi kelas '+c+'</div></div>';
+    html += '<div>➡️</div>';
+    html += '</div>';
+  });
+  list.innerHTML = html;
+}
+
+function openClass(classId){
+  activeClassId = classId;
+  document.getElementById('classList').classList.add('hidden');
+  document.getElementById('classFeedView').classList.remove('hidden');
+  document.getElementById('classFeedTitle').textContent = 'Kelas '+classId;
+  loadClassFeed(classId);
+}
+
+function backToClassList(){
+  activeClassId = null;
+  document.getElementById('classList').classList.remove('hidden');
+  document.getElementById('classFeedView').classList.add('hidden');
+}
+
+function submitClassPost(){
+  const text = document.getElementById('classPostText').value.trim();
+  if(!text && !pendingClassPostImage) return;
+  const post = {
+    authorUid: currentUser.uid,
+    authorName: currentUser.name,
+    authorRole: currentUser.role,
+    text: text,
+    image: pendingClassPostImage || null,
+    target: activeClassId,
+    createdAt: firebase.database.ServerValue.TIMESTAMP,
+    likes: {},
+    comments: {}
+  };
+  db.ref('classPosts/'+activeClassId).push(post).then(()=>{
+    document.getElementById('classPostText').value = '';
+    removeClassPostImage();
+  });
+}
+
+function loadClassFeed(classId){
+  const list = document.getElementById('classFeedList');
+  list.innerHTML = '<div class="loading-spin">Memuat...</div>';
+  db.ref('classPosts/'+classId).orderByChild('createdAt').limitToLast(50).on('value', snap=>{
+    const data = snap.val() || {};
+    const items = Object.entries(data).sort((a,b)=>(b[1].createdAt||0)-(a[1].createdAt||0));
+    if(items.length===0){
+      list.innerHTML = '<div class="empty-state"><div class="icon">🏫</div><p>Belum ada postingan di kelas ini.</p></div>';
+      return;
+    }
+    const refPath = 'classPosts/'+classId;
+    list.innerHTML = items.map(([id,p])=>renderPostCard(id,p,refPath)).join('');
+  });
+}
+
+/* ====================================================================
+   CHAT (Pesan Langsung)
+==================================================================== */
+function chatId(uid1, uid2){
+  return uid1<uid2 ? uid1+'_'+uid2 : uid2+'_'+uid1;
+}
+
+function loadChatList(){
+  const list = document.getElementById('chatList');
+  list.innerHTML = '<div class="loading-spin">Memuat...</div>';
+
+  db.ref('users').once('value').then(snap=>{
+    const data = snap.val() || {};
+    const others = Object.entries(data).filter(([uid,u])=>uid!==currentUser.uid);
+
+    if(others.length===0){
+      list.innerHTML = '<div class="empty-state"><div class="icon">💬</div><p>Belum ada pengguna lain.</p></div>';
+      return;
+    }
+
+    let html = '<p style="font-size:13px;color:var(--muted);margin-bottom:8px;">Pilih pengguna untuk mulai chat:</p>';
+    others.forEach(([uid,u])=>{
+      html += '<div class="chat-list-item" onclick="openChat(\''+uid+'\',\''+escapeHtml(u.name)+'\')">';
+      html += '<span class="avatar small">'+initials(u.name)+'</span>';
+      html += '<div><div style="font-weight:600;font-size:14px;">'+escapeHtml(u.name)+' '+badgeForRole(u.role)+'</div>';
+      html += '<div style="font-size:12px;color:var(--muted);">'+(u.kelas?('Kelas '+escapeHtml(u.kelas)):roleLabel(u.role))+'</div></div>';
+      html += '</div>';
+    });
+    list.innerHTML = html;
+  });
+}
+
+function openChat(peerUid, peerName){
+  activeChatPeerUid = peerUid;
+  document.getElementById('chatListView').classList.add('hidden');
+  document.getElementById('chatWindowView').classList.remove('hidden');
+
+  const cid = chatId(currentUser.uid, peerUid);
+  const msgsEl = document.getElementById('chatMessages');
+  msgsEl.innerHTML = '<div class="loading-spin">Memuat percakapan...</div>';
+
+  if(chatMessagesListener) chatMessagesListener();
+
+  const ref = db.ref('chats/'+cid+'/messages');
+  const handler = snap=>{
+    const data = snap.val() || {};
+    const items = Object.entries(data).sort((a,b)=>(a[1].createdAt||0)-(b[1].createdAt||0));
+    if(items.length===0){
+      msgsEl.innerHTML = '<div class="empty-state"><div class="icon">👋</div><p>Mulai percakapan dengan '+escapeHtml(peerName)+'</p></div>';
+    } else {
+      msgsEl.innerHTML = items.map(([id,m])=>{
+        const mine = m.senderUid===currentUser.uid;
+        return '<div class="chat-bubble '+(mine?'mine':'theirs')+'">'+escapeHtml(m.text)+'</div>';
+      }).join('');
+      msgsEl.scrollTop = msgsEl.scrollHeight;
+    }
+  };
+  ref.on('value', handler);
+  chatMessagesListener = ()=>ref.off('value', handler);
+}
+
+function backToChatList(){
+  activeChatPeerUid = null;
+  if(chatMessagesListener){ chatMessagesListener(); chatMessagesListener=null; }
+  document.getElementById('chatListView').classList.remove('hidden');
+  document.getElementById('chatWindowView').classList.add('hidden');
+}
+
+function sendChatMessage(){
+  const input = document.getElementById('chatInput');
+  const text = input.value.trim();
+  if(!text || !activeChatPeerUid) return;
+  const cid = chatId(currentUser.uid, activeChatPeerUid);
+  db.ref('chats/'+cid+'/messages').push({
+    senderUid: currentUser.uid,
+    senderName: currentUser.name,
+    text: text,
+    createdAt: firebase.database.ServerValue.TIMESTAMP
+  });
+  db.ref('chats/'+cid+'/meta').set({
+    participants: [currentUser.uid, activeChatPeerUid]
+  });
+  input.value = '';
+}
+
+/* ====================================================================
+   PROFIL
+==================================================================== */
+function loadProfile(){
+  document.getElementById('profileAvatar').textContent = initials(currentUser.name);
+  document.getElementById('profileName').textContent = currentUser.name;
+  document.getElementById('profileRole').textContent = roleLabel(currentUser.role);
+  document.getElementById('profileEmail').textContent = currentUser.email;
+
+  if(currentUser.kelas){
+    document.getElementById('profileClass').textContent = 'Kelas '+currentUser.kelas;
+    document.getElementById('profileClassRow').classList.remove('hidden');
+  } else {
+    document.getElementById('profileClassRow').classList.add('hidden');
+  }
+
+  if(currentUser.role==='ortu' && currentUser.childName){
+    document.getElementById('profileChild').textContent = currentUser.childName;
+    document.getElementById('profileChildRow').classList.remove('hidden');
+  }
+
+  if(currentUser.role==='admin'){
+    document.getElementById('adminPanel').classList.remove('hidden');
+    loadAdminUserList();
+  } else {
+    document.getElementById('adminPanel').classList.add('hidden');
+  }
+}
+
+function loadAdminUserList(){
+  const list = document.getElementById('userManageList');
+  db.ref('users').once('value').then(snap=>{
+    const data = snap.val() || {};
+    const items = Object.entries(data);
+    if(items.length===0){
+      list.innerHTML = '<p style="font-size:13px;color:var(--muted);">Belum ada pengguna.</p>';
+      return;
+    }
+    list.innerHTML = items.map(([uid,u])=>{
+      return '<div class="info-row"><span>'+escapeHtml(u.name)+' '+badgeForRole(u.role)+' '+(u.kelas?('('+escapeHtml(u.kelas)+')'):'')+'</span><span style="font-size:12px;color:var(--muted);">'+escapeHtml(u.email)+'</span></div>';
+    }).join('');
+  });
+}
+
+/* ====================================================================
+   PWA: SERVICE WORKER REGISTRATION & INSTALL PROMPT
+==================================================================== */
+if('serviceWorker' in navigator){
+  window.addEventListener('load', ()=>{
+    navigator.serviceWorker.register('service-worker.js')
+      .then(reg=>console.log('Service worker terdaftar:', reg.scope))
+      .catch(err=>console.log('Gagal mendaftarkan service worker:', err));
+  });
+}
+
+let deferredInstallPrompt = null;
+
+// Event ini muncul di Chrome/Android saat aplikasi memenuhi syarat PWA
+window.addEventListener('beforeinstallprompt', (e)=>{
+  e.preventDefault();
+  deferredInstallPrompt = e;
+  showInstallButtons();
+});
+
+function showInstallButtons(){
+  // Tampilkan banner di halaman login (jika belum login)
+  const loginBanner = document.getElementById('installBannerLogin');
+  if(loginBanner) loginBanner.classList.remove('hidden');
+  // Tampilkan ikon di topbar (jika sudah login)
+  const appBtn = document.getElementById('installBtnApp');
+  if(appBtn) appBtn.classList.remove('hidden');
+}
+
+function hideInstallButtons(){
+  const loginBanner = document.getElementById('installBannerLogin');
+  if(loginBanner) loginBanner.classList.add('hidden');
+  const appBtn = document.getElementById('installBtnApp');
+  if(appBtn) appBtn.classList.add('hidden');
+}
+
+function triggerInstall(){
+  if(!deferredInstallPrompt){
+    alert('Untuk menginstal di iPhone/iPad: buka menu Share (kotak dengan tanda panah ke atas) di Safari, lalu pilih "Add to Home Screen".\n\nUntuk Android: pastikan dibuka lewat Chrome, lalu coba lagi atau gunakan menu (titik tiga) > "Add to Home screen".');
+    return;
+  }
+  deferredInstallPrompt.prompt();
+  deferredInstallPrompt.userChoice.then(choice=>{
+    deferredInstallPrompt = null;
+    hideInstallButtons();
+  });
+}
+
+// Setelah berhasil diinstal, sembunyikan tombol/banner
+window.addEventListener('appinstalled', ()=>{
+  hideInstallButtons();
+  deferredInstallPrompt = null;
+});
+</script>
+</body>
+</html>
