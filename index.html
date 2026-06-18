@@ -473,8 +473,8 @@
     <!-- LOGIN FORM -->
     <div id="loginForm">
       <div class="form-group">
-        <label>Email</label>
-        <input type="email" id="loginEmail" placeholder="email@contoh.com">
+        <label>Nomor HP</label>
+        <input type="tel" id="loginPhone" placeholder="Contoh: 081234567890" inputmode="numeric">
       </div>
       <div class="form-group">
         <label>Kata Sandi</label>
@@ -491,8 +491,8 @@
         <input type="text" id="regName" placeholder="Nama lengkap">
       </div>
       <div class="form-group">
-        <label>Email</label>
-        <input type="email" id="regEmail" placeholder="email@contoh.com">
+        <label>Nomor HP</label>
+        <input type="tel" id="regPhone" placeholder="Contoh: 081234567890" inputmode="numeric">
       </div>
       <div class="form-group">
         <label>Kata Sandi</label>
@@ -635,7 +635,7 @@
         <div class="role-line" id="profileRole">-</div>
       </div>
       <div class="composer" style="margin-bottom:14px;">
-        <div class="info-row"><span class="label">Email</span><span id="profileEmail">-</span></div>
+        <div class="info-row"><span class="label">Nomor HP</span><span id="profileEmail">-</span></div>
         <div class="info-row" id="profileClassRow"><span class="label">Kelas</span><span id="profileClass">-</span></div>
         <div class="info-row hidden" id="profileChildRow"><span class="label">Nama Anak</span><span id="profileChild">-</span></div>
       </div>
@@ -665,14 +665,15 @@
    Aktifkan: Authentication (Email/Password) dan Realtime Database
 ==================================================================== */
 const firebaseConfig = {
-  apiKey: "AIzaSyCbcjjAg49PjXALDbHpko_WFv2gdJUcaeY",
-  authDomain: "sekolahconnect-majmaulbahrain.firebaseapp.com",
-  databaseURL: "https://sekolahconnect-majmaulbahrain-default-rtdb.asia-southeast1.firebasedatabase.app",
-  projectId: "sekolahconnect-majmaulbahrain",
-  storageBucket: "sekolahconnect-majmaulbahrain.firebasestorage.app",
-  messagingSenderId: "68540256534",
-  appId: "1:68540256534:web:a68b6575a7796549044037"
+  apiKey: "GANTI_DENGAN_API_KEY",
+  authDomain: "GANTI.firebaseapp.com",
+  databaseURL: "https://GANTI-default-rtdb.firebaseio.com",
+  projectId: "GANTI",
+  storageBucket: "GANTI.appspot.com",
+  messagingSenderId: "GANTI",
+  appId: "GANTI"
 };
+
 firebase.initializeApp(firebaseConfig);
 const auth = firebase.auth();
 const db = firebase.database();
@@ -774,16 +775,42 @@ function populateClassDropdown(){
 /* ====================================================================
    REGISTER & LOGIN
 ==================================================================== */
+/* ====================================================================
+   NOMOR HP -> EMAIL INTERNAL
+   Firebase Authentication membutuhkan format email, jadi nomor HP
+   dikonversi menjadi alamat email internal yang tidak pernah dipakai
+   mengirim email asli. Pengguna tetap hanya melihat & mengetik nomor HP.
+==================================================================== */
+const PHONE_EMAIL_DOMAIN = 'sekolahconnect.local';
+
+// Menormalkan nomor HP: hapus spasi/strip, ubah +62 atau 62 di awal jadi 0
+function normalizePhone(raw){
+  let phone = raw.replace(/[\s\-\(\)]/g, '');
+  if(phone.startsWith('+62')) phone = '0'+phone.slice(3);
+  else if(phone.startsWith('62')) phone = '0'+phone.slice(2);
+  return phone;
+}
+function isValidPhone(phone){
+  return /^0[0-9]{8,13}$/.test(phone);
+}
+function phoneToInternalEmail(phone){
+  return phone+'@'+PHONE_EMAIL_DOMAIN;
+}
+
 function doRegister(){
   const name = document.getElementById('regName').value.trim();
-  const email = document.getElementById('regEmail').value.trim();
+  const phoneRaw = document.getElementById('regPhone').value.trim();
   const password = document.getElementById('regPassword').value;
   const role = document.getElementById('regRole').value;
   const kelas = document.getElementById('regClass').value;
   const childName = document.getElementById('regChildName').value.trim();
 
-  if(!name || !email || !password){
+  if(!name || !phoneRaw || !password){
     showError('Mohon lengkapi semua data.'); return;
+  }
+  const phone = normalizePhone(phoneRaw);
+  if(!isValidPhone(phone)){
+    showError('Format nomor HP tidak valid. Contoh yang benar: 081234567890'); return;
   }
   if(password.length<6){
     showError('Kata sandi minimal 6 karakter.'); return;
@@ -795,11 +822,13 @@ function doRegister(){
     showError('Mohon isi nama anak.'); return;
   }
 
-  auth.createUserWithEmailAndPassword(email, password)
+  const internalEmail = phoneToInternalEmail(phone);
+
+  auth.createUserWithEmailAndPassword(internalEmail, password)
     .then(cred=>{
       const uid = cred.user.uid;
       const userData = {
-        name, email, role,
+        name, phone, role,
         kelas: role==='guru' ? '' : kelas,
         childName: role==='ortu' ? childName : '',
         createdAt: firebase.database.ServerValue.TIMESTAMP
@@ -815,12 +844,17 @@ function doRegister(){
 }
 
 function doLogin(){
-  const email = document.getElementById('loginEmail').value.trim();
+  const phoneRaw = document.getElementById('loginPhone').value.trim();
   const password = document.getElementById('loginPassword').value;
-  if(!email || !password){
-    showError('Mohon isi email dan kata sandi.'); return;
+  if(!phoneRaw || !password){
+    showError('Mohon isi nomor HP dan kata sandi.'); return;
   }
-  auth.signInWithEmailAndPassword(email, password)
+  const phone = normalizePhone(phoneRaw);
+  if(!isValidPhone(phone)){
+    showError('Format nomor HP tidak valid. Contoh yang benar: 081234567890'); return;
+  }
+  const internalEmail = phoneToInternalEmail(phone);
+  auth.signInWithEmailAndPassword(internalEmail, password)
     .catch(err=>{ showError(translateFirebaseError(err)); });
 }
 
@@ -831,12 +865,12 @@ function doLogout(){
 
 function translateFirebaseError(err){
   const map = {
-    'auth/email-already-in-use':'Email sudah terdaftar.',
-    'auth/invalid-email':'Format email tidak valid.',
+    'auth/email-already-in-use':'Nomor HP ini sudah terdaftar.',
+    'auth/invalid-email':'Format nomor HP tidak valid.',
     'auth/weak-password':'Kata sandi terlalu lemah (minimal 6 karakter).',
-    'auth/user-not-found':'Email tidak ditemukan.',
+    'auth/user-not-found':'Nomor HP belum terdaftar.',
     'auth/wrong-password':'Kata sandi salah.',
-    'auth/invalid-credential':'Email atau kata sandi salah.',
+    'auth/invalid-credential':'Nomor HP atau kata sandi salah.',
     'auth/too-many-requests':'Terlalu banyak percobaan. Coba lagi nanti.'
   };
   return map[err.code] || ('Terjadi kesalahan: '+err.message);
@@ -1317,7 +1351,7 @@ function loadProfile(){
   document.getElementById('profileAvatar').textContent = initials(currentUser.name);
   document.getElementById('profileName').textContent = currentUser.name;
   document.getElementById('profileRole').textContent = roleLabel(currentUser.role);
-  document.getElementById('profileEmail').textContent = currentUser.email;
+  document.getElementById('profileEmail').textContent = currentUser.phone;
 
   if(currentUser.kelas){
     document.getElementById('profileClass').textContent = 'Kelas '+currentUser.kelas;
@@ -1349,7 +1383,7 @@ function loadAdminUserList(){
       return;
     }
     list.innerHTML = items.map(([uid,u])=>{
-      return '<div class="info-row"><span>'+escapeHtml(u.name)+' '+badgeForRole(u.role)+' '+(u.kelas?('('+escapeHtml(u.kelas)+')'):'')+'</span><span style="font-size:12px;color:var(--muted);">'+escapeHtml(u.email)+'</span></div>';
+      return '<div class="info-row"><span>'+escapeHtml(u.name)+' '+badgeForRole(u.role)+' '+(u.kelas?('('+escapeHtml(u.kelas)+')'):'')+'</span><span style="font-size:12px;color:var(--muted);">'+escapeHtml(u.phone)+'</span></div>';
     }).join('');
   });
 }
