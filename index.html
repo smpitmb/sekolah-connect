@@ -173,6 +173,28 @@
     color:var(--muted);
   }
   .icon-btn:hover{background:var(--bg);}
+  .notif-badge{
+    position:absolute;
+    top:2px;
+    right:2px;
+    background:var(--red);
+    color:#fff;
+    font-size:10px;
+    font-weight:700;
+    min-width:16px;
+    height:16px;
+    border-radius:8px;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    padding:0 3px;
+    line-height:1;
+  }
+  .tab-item .notif-badge{
+    position:absolute;
+    top:4px;
+    right:8px;
+  }
 
   .container{
     max-width:680px;
@@ -530,7 +552,9 @@
     </div>
     <div class="topbar-right">
       <button class="icon-btn hidden" id="installBtnApp" onclick="triggerInstall()" title="Instal Aplikasi">📲</button>
-      <button class="icon-btn" onclick="goToTab('chat')" title="Pesan">💬</button>
+      <button class="icon-btn" onclick="goToTab('chat')" title="Pesan" style="position:relative;">
+        💬<span class="notif-badge hidden" id="topChatBadge">0</span>
+      </button>
       <button class="icon-btn" onclick="goToTab('profile')" title="Profil">
         <span class="avatar small" id="topAvatar">?</span>
       </button>
@@ -540,9 +564,9 @@
 
   <div class="tabbar">
     <div class="tab-item active" data-tab="feed" onclick="goToTab('feed')">🏠 Beranda</div>
-    <div class="tab-item" data-tab="announcements" onclick="goToTab('announcements')">📢 Pengumuman</div>
+    <div class="tab-item" data-tab="announcements" onclick="goToTab('announcements')" style="position:relative;">📢 Pengumuman<span class="notif-badge hidden" id="tabAnnounceBadge">0</span></div>
     <div class="tab-item" data-tab="classes" onclick="goToTab('classes')">🏫 Kelas</div>
-    <div class="tab-item" data-tab="chat" onclick="goToTab('chat')">💬 Pesan</div>
+    <div class="tab-item" data-tab="chat" onclick="goToTab('chat')" style="position:relative;">💬 Pesan<span class="notif-badge hidden" id="tabChatBadge">0</span></div>
     <div class="tab-item" data-tab="profile" onclick="goToTab('profile')">👤 Profil</div>
   </div>
 
@@ -693,6 +717,16 @@ let pendingClassPostImage = null;
 let activeClassId = null;
 let activeChatPeerUid = null;
 let chatMessagesListener = null;
+
+/* State untuk sistem notifikasi (badge, suara, notifikasi browser) */
+let notifSoundUnlocked = false;
+let lastSeenAnnouncementAt = 0;
+let lastSeenChatAt = {};       // { chatId: timestamp }
+let unreadChatCount = 0;
+let unreadAnnounceCount = 0;
+let globalChatListeners = [];  // kumpulan unsubscribe function utk tiap chat
+let isFirstAnnouncementLoad = true;
+let isFirstChatScan = true;
 
 /* ====================================================================
    UTIL
@@ -860,6 +894,14 @@ function doLogin(){
 
 function doLogout(){
   if(chatMessagesListener) chatMessagesListener();
+  // Lepas semua listener pemantau chat untuk notifikasi agar tidak menumpuk di sesi berikutnya
+  globalChatListeners.forEach(unsub=>unsub());
+  globalChatListeners = [];
+  db.ref('announcements').off('value');
+  unreadChatCount = 0;
+  unreadAnnounceCount = 0;
+  isFirstAnnouncementLoad = true;
+  isFirstChatScan = true;
   auth.signOut();
 }
 
@@ -930,7 +972,220 @@ function enterApp(){
   loadAnnouncements();
   loadClasses();
   loadProfile();
+
+  initNotificationSystem();
 }
+
+/* ====================================================================
+   SISTEM NOTIFIKASI (gratis, tanpa server)
+   - Notifikasi browser: muncul saat tab berjalan di background/minimized
+     (selama browser & OS masih mengizinkan service worker aktif)
+   - Badge angka di ikon Pesan/Pengumuman saat ada yang belum dibaca
+   - Suara & getar singkat saat pesan/pengumuman baru masuk
+   Catatan: ini BUKAN push notification sungguhan. Jika aplikasi
+   benar-benar ditutup/di-kill oleh sistem, notifikasi tidak akan masuk.
+   Untuk itu diperlukan Firebase Cloud Messaging + Cloud Functions
+   (memerlukan paket Blaze berbayar).
+==================================================================== */
+function initNotificationSystem(){
+  // Minta izin notifikasi browser (sekali saja, tidak mengganggu jika ditolak)
+  if('Notification' in window && Notification.permission==='default'){
+    // Tunda sedikit agar tidak langsung muncul saat baru login
+    setTimeout(()=>{ Notification.requestPermission(); }, 1500);
+  }
+
+  // Unlock suara notifikasi saat user pertama kali berinteraksi (kebijakan browser)
+  const unlockAudio = ()=>{
+    notifSoundUnlocked = true;
+    document.removeEventListener('click', unlockAudio);
+  };
+  document.addEventListener('click', unlockAudio);
+
+  // Ambil waktu terakhir kali user melihat pengumuman & chat (disimpan di Firebase per akun)
+  db.ref('userMeta/'+currentUser.uid+'/lastSeenAnnouncementAt').once('value').then(snap=>{
+    lastSeenAnnouncementAt = snap.val() || Date.now();
+    watchAnnouncementsForNotif();
+  });
+
+  db.ref('userMeta/'+currentUser.uid+'/lastSeenChatAt').once('value').then(snap=>{
+    lastSeenChatAt = snap.val() || {};
+    watchAllChatsForNotif();
+  });
+}
+
+function playNotifSound(){
+  if(!notifSoundUnlocked) return;
+  try{
+    // Bunyi notifikasi sederhana dibuat langsung lewat Web Audio API (tidak perlu file suara)
+    const ctx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = ctx.createOscillator();
+    const gain = ctx.createGain();
+    osc.connect(gain); gain.connect(ctx.destination);
+    osc.type = 'sine';
+    osc.frequency.setValueAtTime(880, ctx.currentTime);
+    gain.gain.setValueAtTime(0.15, ctx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime+0.35);
+    osc.start();
+    osc.stop(ctx.currentTime+0.35);
+  }catch(e){ /* abaikan jika browser tidak mendukung */ }
+}
+
+function vibrateNotif(){
+  if('vibrate' in navigator){
+    try{ navigator.vibrate([120,60,120]); }catch(e){}
+  }
+}
+
+function showBrowserNotification(title, body){
+  if(!('Notification' in window)) return;
+  if(Notification.permission!=='granted') return;
+  // Hanya tampilkan jika tab sedang tidak aktif/terlihat, agar tidak dobel dengan badge in-app
+  if(document.visibilityState==='visible') return;
+
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.getRegistration().then(reg=>{
+      if(reg){
+        reg.showNotification(title, {
+          body: body,
+          icon: 'icons/icon-192.png',
+          badge: 'icons/icon-96.png',
+          vibrate: [120,60,120],
+          tag: 'sekolahconnect-notif'
+        });
+      } else {
+        new Notification(title, { body, icon: 'icons/icon-192.png' });
+      }
+    });
+  } else {
+    new Notification(title, { body, icon: 'icons/icon-192.png' });
+  }
+}
+
+function updateChatBadge(){
+  const topBadge = document.getElementById('topChatBadge');
+  const tabBadge = document.getElementById('tabChatBadge');
+  [topBadge, tabBadge].forEach(el=>{
+    if(!el) return;
+    if(unreadChatCount>0){
+      el.textContent = unreadChatCount>9 ? '9+' : unreadChatCount;
+      el.classList.remove('hidden');
+    } else {
+      el.classList.add('hidden');
+    }
+  });
+}
+
+function updateAnnounceBadge(){
+  const tabBadge = document.getElementById('tabAnnounceBadge');
+  if(!tabBadge) return;
+  if(unreadAnnounceCount>0){
+    tabBadge.textContent = unreadAnnounceCount>9 ? '9+' : unreadAnnounceCount;
+    tabBadge.classList.remove('hidden');
+  } else {
+    tabBadge.classList.add('hidden');
+  }
+}
+
+// Memantau pengumuman baru secara real-time
+function watchAnnouncementsForNotif(){
+  db.ref('announcements').orderByChild('createdAt').limitToLast(20).on('value', snap=>{
+    const data = snap.val() || {};
+    const items = Object.entries(data);
+
+    const unread = items.filter(([id,a])=> (a.createdAt||0) > lastSeenAnnouncementAt && a.authorUid!==currentUser.uid);
+    unreadAnnounceCount = unread.length;
+    updateAnnounceBadge();
+
+    // Jika sedang bukan di tab pengumuman dan ada item baru sungguhan (bukan saat load pertama kali), beri notifikasi
+    if(!isFirstAnnouncementLoad && unread.length>0 && currentTab!=='announcements'){
+      const newest = unread[unread.length-1][1];
+      notifyNewItem('📢 Pengumuman Baru', newest.authorName+': '+(newest.text||'').slice(0,80));
+    }
+    isFirstAnnouncementLoad = false;
+  });
+}
+
+// Memantau seluruh percakapan milik user secara real-time
+function watchAllChatsForNotif(){
+  db.ref('users').once('value').then(snap=>{
+    const data = snap.val() || {};
+    const others = Object.keys(data).filter(uid=>uid!==currentUser.uid);
+
+    others.forEach(peerUid=>{
+      const cid = chatId(currentUser.uid, peerUid);
+      const ref = db.ref('chats/'+cid+'/messages').orderByChild('createdAt').limitToLast(10);
+      const handler = snap=>{
+        const msgs = snap.val() || {};
+        const items = Object.entries(msgs);
+        const seenAt = lastSeenChatAt[cid] || 0;
+        const unread = items.filter(([id,m])=> (m.createdAt||0) > seenAt && m.senderUid!==currentUser.uid);
+
+        recalcUnreadChatTotal();
+
+        if(!isFirstChatScan && unread.length>0){
+          const isOpenNow = (currentTab==='chat' && activeChatPeerUid===peerUid);
+          if(!isOpenNow){
+            const newest = unread[unread.length-1][1];
+            notifyNewItem('💬 '+(newest.senderName||'Pesan baru'), newest.text||'');
+          }
+        }
+      };
+      ref.on('value', handler);
+      globalChatListeners.push(()=>ref.off('value', handler));
+    });
+
+    // Tandai scan pertama selesai setelah semua listener terpasang
+    setTimeout(()=>{ isFirstChatScan = false; }, 1500);
+  });
+}
+
+function recalcUnreadChatTotal(){
+  db.ref('users').once('value').then(snap=>{
+    const data = snap.val() || {};
+    const others = Object.keys(data).filter(uid=>uid!==currentUser.uid);
+    let pending = others.length;
+    let total = 0;
+
+    if(others.length===0){ unreadChatCount = 0; updateChatBadge(); return; }
+
+    others.forEach(peerUid=>{
+      const cid = chatId(currentUser.uid, peerUid);
+      db.ref('chats/'+cid+'/messages').orderByChild('createdAt').limitToLast(20).once('value').then(s=>{
+        const msgs = s.val() || {};
+        const seenAt = lastSeenChatAt[cid] || 0;
+        const unread = Object.values(msgs).filter(m=>(m.createdAt||0)>seenAt && m.senderUid!==currentUser.uid);
+        if(unread.length>0) total += 1; // dihitung per percakapan yang punya pesan belum dibaca
+        pending--;
+        if(pending===0){
+          unreadChatCount = total;
+          updateChatBadge();
+        }
+      });
+    });
+  });
+}
+
+function notifyNewItem(title, body){
+  playNotifSound();
+  vibrateNotif();
+  showBrowserNotification(title, body);
+}
+
+// Menandai pengumuman sudah dibaca (dipanggil saat tab Pengumuman dibuka)
+function markAnnouncementsSeen(){
+  lastSeenAnnouncementAt = Date.now();
+  unreadAnnounceCount = 0;
+  updateAnnounceBadge();
+  db.ref('userMeta/'+currentUser.uid+'/lastSeenAnnouncementAt').set(lastSeenAnnouncementAt);
+}
+
+// Menandai satu percakapan sudah dibaca (dipanggil saat openChat)
+function markChatSeen(cid){
+  lastSeenChatAt[cid] = Date.now();
+  db.ref('userMeta/'+currentUser.uid+'/lastSeenChatAt/'+cid).set(lastSeenChatAt[cid]);
+  recalcUnreadChatTotal();
+}
+
 
 function setupPostTargetOptions(){
   const sel = document.getElementById('postTarget');
@@ -958,6 +1213,7 @@ function goToTab(tab){
 
   if(tab==='classes'){ backToClassList(); }
   if(tab==='chat'){ backToChatList(); loadChatList(); }
+  if(tab==='announcements'){ markAnnouncementsSeen(); }
 }
 
 /* ====================================================================
@@ -1297,6 +1553,7 @@ function openChat(peerUid, peerName){
   document.getElementById('chatWindowView').classList.remove('hidden');
 
   const cid = chatId(currentUser.uid, peerUid);
+  markChatSeen(cid);
   const msgsEl = document.getElementById('chatMessages');
   msgsEl.innerHTML = '<div class="loading-spin">Memuat percakapan...</div>';
 
@@ -1314,6 +1571,8 @@ function openChat(peerUid, peerName){
         return '<div class="chat-bubble '+(mine?'mine':'theirs')+'">'+escapeHtml(m.text)+'</div>';
       }).join('');
       msgsEl.scrollTop = msgsEl.scrollHeight;
+      // Selama jendela chat ini masih terbuka, tandai terus sebagai sudah dibaca
+      if(activeChatPeerUid===peerUid){ markChatSeen(cid); }
     }
   };
   ref.on('value', handler);
